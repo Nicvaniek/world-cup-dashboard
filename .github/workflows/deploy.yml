@@ -1,0 +1,56 @@
+name: Build & deploy dashboard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # every 20 minutes during the tournament (ends July 19, 2026)
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refresh live results feed
+        run: |
+          set +e
+          curl -sL --max-time 30 "https://fixturedownload.com/feed/json/fifa-world-cup-2026" -o fresh.json
+          # only accept a valid, complete feed; otherwise keep the committed snapshot
+          python3 - <<'EOF'
+          import json, os, shutil
+          try:
+              data = json.load(open('fresh.json'))
+              assert isinstance(data, list) and len(data) >= 104
+              shutil.move('fresh.json', 'feed.json')
+              print('feed refreshed:', sum(1 for m in data if m.get('HomeTeamScore') is not None), 'matches with scores')
+          except Exception as e:
+              print('keeping committed feed snapshot:', e)
+              if os.path.exists('fresh.json'): os.remove('fresh.json')
+          EOF
+
+      - name: Build site
+        run: python3 build.py
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
