@@ -1,8 +1,10 @@
 <title>WC26 Bracket Lab — Predict the Knockouts</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Condensed:wght@600;800&display=swap" rel="stylesheet">
 <style>
-{{FONTS}}
 {{STYLES}}
 </style>
 
@@ -11,15 +13,14 @@
     <div>
       <p class="mast-kicker">FIFA World Cup 2026 · USA · Canada · México</p>
       <h1 class="mast-title">Bracket <span class="tri">Lab</span></h1>
-      <p class="mast-sub">The knockouts are live. Call every match — win, lose, or draw after 90 —
-      and follow your picks all the way to MetLife on July&nbsp;19. Probabilities run on live Elo
-      ratings; tap any fixture for form and insights before you commit.</p>
+      <p class="mast-sub">The knockouts are live. Every fixture carries win / draw / win odds from an
+      Elo model, and one tap opens recent form and match insights — everything you need to call it
+      in your predictor, all the way to MetLife on July&nbsp;19.</p>
     </div>
     <div class="meter-card">
-      <div class="meter-label"><span>Your bracket</span><strong id="meter-count">0 / 0</strong></div>
-      <div class="meter-track"><div class="meter-fill" id="meter-fill"></div></div>
-      <div class="meter-hint" id="meter-hint">Pick every match to crown your champion.</div>
-      <div class="sync-badge" id="sync-badge">Checking for new scores…</div>
+      <div class="meter-label"><span>Tournament state</span></div>
+      <button id="refresh-btn" class="refresh-btn"><span class="rf-ic">⟳</span> Refresh scores</button>
+      <div class="sync-badge" id="sync-badge">Loading latest scores…</div>
     </div>
   </div>
 </header>
@@ -28,7 +29,7 @@
   <section class="section reveal">
     <div class="sec-head">
       <h2 class="sec-title">The Road to MetLife</h2>
-      <span class="sec-note">Faded matches are final · cards with a ribbon are your picks · ✦ = through on penalties. Click any match.</span>
+      <span class="sec-note">Faded matches are final · colour strips show each side's win odds. Click any match for form &amp; insights.</span>
     </div>
     <div class="bracket-scroller">
       <div class="bracket" id="bracket"></div>
@@ -75,18 +76,16 @@
 </main>
 
 <footer class="foot">
-  Results and stats through {{UPDATED}} · Sources: match data cross-checked against Wikipedia and news reports;
-  ratings from World Football Elo (eloratings.net) and the FIFA ranking. Probabilities are a model, not a promise —
-  that's what makes it fun. Predictions live in your browser only.
+  Baseline results through {{UPDATED}}; live scores pulled straight from ESPN's public scoreboard when you refresh.
+  Ratings from World Football Elo (eloratings.net). Probabilities are a model, not a promise —
+  that's what makes it fun.
 </footer>
 
 <div class="overlay" id="overlay"></div>
 <aside class="panel" id="panel" aria-label="Match details"></aside>
 <canvas id="confetti"></canvas>
 
-<script>
-{{DATA}}
-</script>
+<script src="data.js"></script>
 <script>
 {{APP}}
 </script>

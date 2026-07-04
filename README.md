@@ -1,14 +1,19 @@
 # WC26 Bracket Lab
 
-Interactive FIFA World Cup 2026 knockout dashboard: predict every remaining
-match (win / draw-after-90 / loss), follow your picks through an animated
-bracket to the final, and browse attack/defence form charts.
+A live FIFA World Cup 2026 knockout dashboard: the full bracket from the
+Round of 32 to the MetLife final, win / draw / win probabilities for every
+upcoming fixture, and per-match form + insights — plus attack and defence
+form charts for all 48 teams.
 
-- **Live results**: a GitHub Action refreshes `feed.json` from
-  fixturedownload.com every 20 minutes and redeploys; the page also polls for
-  new scores every 3 minutes while open.
+- **Live scores**: the page ships with a baked-in snapshot and pulls fresh
+  scores straight from ESPN's public scoreboard in your browser — on load and
+  whenever you hit **Refresh scores**. No backend, no cron.
 - **Probabilities**: World Football Elo model with a host-nation venue boost;
-  draw share calibrated to 90-minute knockout draw rates.
-- **Predictions** are stored in your browser (localStorage) — no accounts, no backend.
+  the draw share is calibrated to 90-minute knockout draw rates.
+- Read-only by design: make your actual picks wherever you like — this is the
+  scouting report.
 
-Build locally: `python3 build.py` then open `site/index.html`.
+Build: `python3 build.py` regenerates `docs/index.html` (served by GitHub Pages).
+Data inputs: `feed.json` (schedule/results snapshot), `team_meta.json` (flags,
+colours, codes), `elo.json`, `pre.json` (pre-tournament form), `notes.json`
+(optional storylines).

@@ -1,4 +1,4 @@
-site/
-fresh.json
 dom*.html
 .DS_Store
+fresh.json
+site/

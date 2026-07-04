@@ -1,0 +1,257 @@
+{
+ "Mexico": [
+  {
+   "o": "Serbia",
+   "flag": "🇷🇸",
+   "comp": "Friendly · Jun",
+   "score": "5–1",
+   "r": "W"
+  },
+  {
+   "o": "Australia",
+   "flag": "🇦🇺",
+   "comp": "Friendly · May",
+   "score": "1–0",
+   "r": "W"
+  },
+  {
+   "o": "Ghana",
+   "flag": "🇬🇭",
+   "comp": "Friendly · May",
+   "score": "2–0",
+   "r": "W"
+  }
+ ],
+ "England": [
+  {
+   "o": "Costa Rica",
+   "flag": "🇨🇷",
+   "comp": "Friendly · Jun",
+   "score": "3–0",
+   "r": "W"
+  },
+  {
+   "o": "New Zealand",
+   "flag": "🇳🇿",
+   "comp": "Friendly · Jun",
+   "score": "1–0",
+   "r": "W"
+  },
+  {
+   "o": "Japan",
+   "flag": "🇯🇵",
+   "comp": "Friendly · Mar",
+   "score": "0–1",
+   "r": "L"
+  }
+ ],
+ "Spain": [
+  {
+   "o": "Peru",
+   "flag": "🇵🇪",
+   "comp": "Friendly · Jun",
+   "score": "3–1",
+   "r": "W"
+  },
+  {
+   "o": "Iraq",
+   "flag": "🇮🇶",
+   "comp": "Friendly · Jun",
+   "score": "1–1",
+   "r": "D"
+  },
+  {
+   "o": "Egypt",
+   "flag": "🇪🇬",
+   "comp": "Friendly · Mar",
+   "score": "0–0",
+   "r": "D"
+  }
+ ],
+ "Norway": [
+  {
+   "o": "Morocco",
+   "flag": "🇲🇦",
+   "comp": "Friendly · Jun",
+   "score": "1–1",
+   "r": "D"
+  },
+  {
+   "o": "Sweden",
+   "flag": "🇸🇪",
+   "comp": "Friendly · Jun",
+   "score": "3–1",
+   "r": "W"
+  },
+  {
+   "o": "Switzerland",
+   "flag": "🇨🇭",
+   "comp": "Friendly · Mar",
+   "score": "0–0",
+   "r": "D"
+  }
+ ],
+ "Portugal": [
+  {
+   "o": "Nigeria",
+   "flag": "🇳🇬",
+   "comp": "Friendly · Jun",
+   "score": "2–1",
+   "r": "W"
+  },
+  {
+   "o": "Chile",
+   "flag": "🇨🇱",
+   "comp": "Friendly · Jun",
+   "score": "2–1",
+   "r": "W"
+  },
+  {
+   "o": "USA",
+   "flag": "🇺🇸",
+   "comp": "Friendly · Mar",
+   "score": "2–0",
+   "r": "W"
+  }
+ ],
+ "Canada": [
+  {
+   "o": "Ireland",
+   "flag": "🇮🇪",
+   "comp": "Friendly · Jun",
+   "score": "1–1",
+   "r": "D"
+  },
+  {
+   "o": "Uzbekistan",
+   "flag": "🇺🇿",
+   "comp": "Friendly · Jun",
+   "score": "2–0",
+   "r": "W"
+  },
+  {
+   "o": "Tunisia",
+   "flag": "🇹🇳",
+   "comp": "Friendly · Mar",
+   "score": "0–0",
+   "r": "D"
+  }
+ ],
+ "Morocco": [
+  {
+   "o": "Norway",
+   "flag": "🇳🇴",
+   "comp": "Friendly · Jun",
+   "score": "1–1",
+   "r": "D"
+  },
+  {
+   "o": "Madagascar",
+   "flag": "🇲🇬",
+   "comp": "Friendly · Jun",
+   "score": "4–0",
+   "r": "W"
+  },
+  {
+   "o": "Paraguay",
+   "flag": "🇵🇾",
+   "comp": "Friendly · Mar",
+   "score": "2–1",
+   "r": "W"
+  }
+ ],
+ "Paraguay": [
+  {
+   "o": "Nicaragua",
+   "flag": "🇳🇮",
+   "comp": "Friendly · Jun",
+   "score": "4–0",
+   "r": "W"
+  },
+  {
+   "o": "Morocco",
+   "flag": "🇲🇦",
+   "comp": "Friendly · Mar",
+   "score": "1–2",
+   "r": "L"
+  },
+  {
+   "o": "Greece",
+   "flag": "🇬🇷",
+   "comp": "Friendly · Mar",
+   "score": "1–0",
+   "r": "W"
+  }
+ ],
+ "France": [
+  {
+   "o": "Northern Ireland",
+   "flag": "🏴",
+   "comp": "Friendly · Jun",
+   "score": "3–1",
+   "r": "W"
+  },
+  {
+   "o": "Côte d'Ivoire",
+   "flag": "🇨🇮",
+   "comp": "Friendly · Jun",
+   "score": "1–2",
+   "r": "L"
+  },
+  {
+   "o": "Colombia",
+   "flag": "🇨🇴",
+   "comp": "Friendly · Mar",
+   "score": "3–1",
+   "r": "W"
+  }
+ ],
+ "Brazil": [
+  {
+   "o": "Egypt",
+   "flag": "🇪🇬",
+   "comp": "Friendly · Jun",
+   "score": "2–1",
+   "r": "W"
+  },
+  {
+   "o": "Croatia",
+   "flag": "🇭🇷",
+   "comp": "Friendly · Mar",
+   "score": "3–1",
+   "r": "W"
+  },
+  {
+   "o": "France",
+   "flag": "🇫🇷",
+   "comp": "Friendly · Mar",
+   "score": "1–2",
+   "r": "L"
+  }
+ ],
+ "Switzerland": [
+  {
+   "o": "Jordan",
+   "flag": "🇯🇴",
+   "comp": "Friendly · May",
+   "score": "4–1",
+   "r": "W"
+  }
+ ],
+ "Belgium": [
+  {
+   "o": "Tunisia",
+   "flag": "🇹🇳",
+   "comp": "Friendly · Jun",
+   "score": "5–0",
+   "r": "W"
+  },
+  {
+   "o": "USA",
+   "flag": "🇺🇸",
+   "comp": "Friendly · Mar",
+   "score": "5–2",
+   "r": "W"
+  }
+ ]
+}

@@ -1,4 +1,6 @@
-/* WC26 Bracket Lab — engine. Builds all state from the match feed. */
+/* WC26 Bracket Lab — live tournament dashboard.
+   Read-only: current bracket state, win/draw/loss odds, form and insights.
+   Scores refresh straight from ESPN's public scoreboard in the browser. */
 (function () {
   'use strict';
 
@@ -33,27 +35,84 @@
   }
   function fmtTime(utc) {
     const d = new Date(utc.replace(' ', 'T'));
-    let h = d.getHours(), m = d.getMinutes();
+    let h = d.getHours(); const m = d.getMinutes();
     const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12;
     return h + (m ? ':' + String(m).padStart(2, '0') : '') + ap + ' your time';
   }
 
+  /* ---------- live scores straight from ESPN (CORS-open) ---------- */
+  const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200';
+  const ESPN_NAMES = {
+    'United States': 'USA', 'Ivory Coast': "Côte d'Ivoire", 'Cape Verde Islands': 'Cabo Verde',
+    'Cape Verde': 'Cabo Verde', 'South Korea': 'Korea Republic', 'Czech Republic': 'Czechia',
+    'Turkey': 'Türkiye', 'Iran': 'IR Iran', 'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
+    'DR Congo': 'Congo DR',
+  };
+  const normName = n => ESPN_NAMES[n] || n;
+  const feedKey = utc => utc.replace(' ', 'T').replace(':00Z', 'Z');
+
+  /* merge ESPN events over the embedded snapshot; returns a fresh feed array */
+  function mergeEspn(espn) {
+    const feed = JSON.parse(JSON.stringify(SNAPSHOT_EMBED));
+    const evs = (espn && espn.events) || [];
+    const byDate = {};
+    evs.forEach(e => { (byDate[e.date] = byDate[e.date] || []).push(e); });
+    feed.forEach(m => {
+      let cands = byDate[feedKey(m.DateUtc)] || [];
+      if (cands.length > 1) {
+        const known = [m.HomeTeam, m.AwayTeam].filter(x => x && x !== 'To be announced');
+        if (known.length) {
+          cands = cands.filter(e => e.competitions[0].competitors.some(c =>
+            known.includes(normName(c.team.displayName))));
+        }
+      }
+      const e = cands[0];
+      if (!e) return;
+      const c = e.competitions[0];
+      const st = (c.status && c.status.type) || (e.status && e.status.type) || {};
+      const comps = {};
+      c.competitors.forEach(x => { comps[x.homeAway] = x; });
+      if (!comps.home || !comps.away) return;
+      const hn = normName(comps.home.team.displayName);
+      const an = normName(comps.away.team.displayName);
+      // adopt newly-announced teams for knockout slots
+      if (m.HomeTeam === 'To be announced' && TEAM_META[hn]) m.HomeTeam = hn;
+      if (m.AwayTeam === 'To be announced' && TEAM_META[an]) m.AwayTeam = an;
+      // orient ESPN sides onto the feed's home/away
+      let H = null, A = null;
+      if (hn === m.HomeTeam && an === m.AwayTeam) { H = comps.home; A = comps.away; }
+      else if (hn === m.AwayTeam && an === m.HomeTeam) { H = comps.away; A = comps.home; }
+      if (!H || !A) return;
+      if (st.state === 'post' && st.completed !== false) {
+        m.HomeTeamScore = +H.score; m.AwayTeamScore = +A.score;
+        if (m.HomeTeamScore === m.AwayTeamScore) {
+          const w = H.winner ? m.HomeTeam : A.winner ? m.AwayTeam : null;
+          m.Winner = w || m.Winner;
+          if (w && H.shootoutScore != null && A.shootoutScore != null) {
+            m.Pens = H.shootoutScore + '–' + A.shootoutScore;
+          }
+        } else {
+          m.Winner = m.HomeTeamScore > m.AwayTeamScore ? m.HomeTeam : m.AwayTeam;
+        }
+      } else if (st.state === 'in') {
+        m.Live = { score: H.score + '–' + A.score, clock: st.shortDetail || 'LIVE' };
+      }
+    });
+    return feed;
+  }
+
   /* ---------- state built from feed ---------- */
-  let S = null;           // { teams, matches, byNum }
-  let feedData = SNAPSHOT; // embedded snapshot; replaced by live fetches
-  let lastSync = null;
+  let S = null;
 
   function buildState(feed) {
     const teams = {};
     Object.keys(TEAM_META).forEach(n => {
-      teams[n] = Object.assign({ name: n, mp: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, alive: false, inKO: false, tourGames: [] }, TEAM_META[n]);
+      teams[n] = Object.assign({ name: n, mp: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, alive: false, tourGames: [] }, TEAM_META[n]);
     });
     const t = n => teams[n];
     const sorted = feed.slice().sort((a, b) => a.MatchNumber - b.MatchNumber);
-    const byNum = {};
     const matches = [];
     sorted.forEach(m => {
-      byNum[m.MatchNumber] = m;
       if (m.Winner === 'Draw') m.Winner = null;
       const played = m.HomeTeamScore != null && m.AwayTeamScore != null;
       const round = ROUND_OF(m.MatchNumber);
@@ -70,8 +129,8 @@
           const pens = hr === 'D' && m.Winner ? ' · ' + (m.Winner === m.HomeTeam ? 'won' : 'lost') + ' on pens' : '';
           const pensA = ar === 'D' && m.Winner ? ' · ' + (m.Winner === m.AwayTeam ? 'won' : 'lost') + ' on pens' : '';
           const comp = round === 'G' ? 'Group' : ROUND_NAMES[round].replace('Round of 32', 'R32').replace('Quarter-final', 'QF');
-          H.tourGames.unshift({ o: m.AwayTeam, flag: A.flag, comp: comp, score: m.HomeTeamScore + '–' + m.AwayTeamScore + pens, r: hr, num: m.MatchNumber });
-          A.tourGames.unshift({ o: m.HomeTeam, flag: H.flag, comp: comp, score: m.AwayTeamScore + '–' + m.HomeTeamScore + pensA, r: ar, num: m.MatchNumber });
+          H.tourGames.unshift({ o: m.AwayTeam, flag: A.flag, comp: comp, score: m.HomeTeamScore + '–' + m.AwayTeamScore + pens, r: hr });
+          A.tourGames.unshift({ o: m.HomeTeam, flag: H.flag, comp: comp, score: m.AwayTeamScore + '–' + m.HomeTeamScore + pensA, r: ar });
         }
       }
       if (m.MatchNumber >= 73) {
@@ -83,8 +142,9 @@
           home: m.HomeTeam !== 'To be announced' ? m.HomeTeam : null,
           away: m.AwayTeam !== 'To be announced' ? m.AwayTeam : null,
           hs: m.HomeTeamScore, as: m.AwayTeamScore,
-          played: played, winner: winner,
-          pens: played && m.HomeTeamScore === m.AwayTeamScore && m.Winner ? m.Winner + ' win on penalties' : null,
+          played: played, winner: winner, live: m.Live || null,
+          pens: played && m.HomeTeamScore === m.AwayTeamScore && m.Winner
+            ? m.Winner + ' win ' + (m.Pens ? m.Pens + ' on penalties' : 'on penalties') : null,
           date: fmtDate(m.DateUtc), time: fmtTime(m.DateUtc),
           venue: m.Location, city: cityName(m.Location), country: venueCountry(m.Location),
           side: so[0], ord: so[1],
@@ -92,21 +152,13 @@
         });
       }
     });
-    // knockout participation + alive
-    matches.forEach(km => { if (km.home) t(km.home).inKO = true; if (km.away) t(km.away).inKO = true; });
-    Object.values(teams).forEach(x => { x.alive = false; });
+    // alive = still has a path in the tournament (real results only)
     matches.forEach(km => {
-      [km.home, km.away].forEach(name => {
-        if (!name) return;
-        if (!km.played) t(name).alive = true;               // scheduled to play
-      });
+      [km.home, km.away].forEach(name => { if (name && !km.played) t(name).alive = true; });
       if (km.played && km.winner && km.round !== 'F' && km.round !== 'B') {
-        // winner alive unless already eliminated in a later played match
-        const w = t(km.winner);
         const laterLoss = matches.some(o => o.played && o.num > km.num && (o.home === km.winner || o.away === km.winner) && o.winner !== km.winner);
         const laterGame = matches.some(o => !o.played && (o.home === km.winner || o.away === km.winner));
-        if (!laterLoss || laterGame) w.alive = true;
-        if (laterLoss && !laterGame) w.alive = false;
+        t(km.winner).alive = !laterLoss || laterGame;
       }
     });
     // last5 = tournament games (newest first) + pre-tournament filler
@@ -115,49 +167,21 @@
       x.last5 = x.tourGames.slice(0, 5);
       while (x.last5.length < 5 && pre.length) x.last5.push(pre.shift());
     });
-    const feedsOf = {};
-    Object.keys(FEEDERS).forEach(k => FEEDERS[k].forEach(f => feedsOf[f] = +k));
-    matches.forEach(km => { km.feeds = feedsOf[km.num] || null; });
     return { teams: teams, matches: matches, byNum: matches.reduce((o, m) => (o[m.num] = m, o), {}) };
   }
 
-  /* ---------- picks ---------- */
-  const LS_KEY = 'wc26-picks-v2';
-  let picks = {};
-  try { picks = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { picks = {}; }
-  function savePicks() { try { localStorage.setItem(LS_KEY, JSON.stringify(picks)); } catch (e) {} }
-  function pickKey(m, h, a) { return m.num + ':' + h + ':' + a; }
-
-  /* ---------- resolution: actual result > user pick ---------- */
-  function advancer(m) {
-    if (m.played && m.winner) return { name: m.winner, real: true };
-    const h = resolveSlot(m, 0), a = resolveSlot(m, 1);
-    if (!h.name || !a.name) return { name: null };
-    const p = picks[pickKey(m, h.name, a.name)];
-    if (!p) return { name: null };
-    const adv = p.result === 'H' ? h.name : p.result === 'A' ? a.name : p.adv === 'H' ? h.name : p.adv === 'A' ? a.name : null;
-    return { name: adv, real: false };
-  }
+  /* ---------- slot resolution (real results only) ---------- */
   function resolveSlot(m, i) {
     const fixed = i === 0 ? m.home : m.away;
-    if (fixed) return { name: fixed, real: true };
-    if (m.round === 'B') { // bronze: losers of semis
+    if (fixed) return fixed;
+    if (m.round === 'B') {
       const sf = S.byNum[i === 0 ? 101 : 102];
-      if (sf && sf.played && sf.winner) {
-        const loser = sf.winner === sf.home ? sf.away : sf.home;
-        return { name: loser, real: true };
-      }
-      // predicted loser
-      if (sf) {
-        const h = resolveSlot(sf, 0), a = resolveSlot(sf, 1);
-        const adv = advancer(sf);
-        if (h.name && a.name && adv.name) return { name: adv.name === h.name ? a.name : h.name, real: false };
-      }
-      return { name: null };
+      if (sf && sf.played && sf.winner) return sf.winner === sf.home ? sf.away : sf.home;
+      return null;
     }
-    if (!m.feeders) return { name: null };
+    if (!m.feeders) return null;
     const src = S.byNum[m.feeders[i]];
-    return src ? advancer(src) : { name: null };
+    return src && src.played ? src.winner : null;
   }
   function slots(m) { return { h: resolveSlot(m, 0), a: resolveSlot(m, 1) }; }
 
@@ -191,29 +215,24 @@
   function colMatches(round, side) {
     return S.matches.filter(m => m.round === round && m.side === side).sort((a, b) => a.ord - b.ord);
   }
-  function teamRowHTML(m, slot, pair) {
-    if (!slot.name) {
+  function teamRowHTML(m, name, other, isHome) {
+    if (!name) {
       let label = 'Winner TBD';
       const SHORT = { R32: 'R32', R16: 'R16', QF: 'QF', SF: 'SF' };
       if (m.round === 'B') label = 'SF loser';
       else if (m.feeders) {
-        const src = S.byNum[m.feeders[slot === pair.h ? 0 : 1]];
+        const src = S.byNum[m.feeders[isHome ? 0 : 1]];
         if (src) label = src.home && src.away ? 'Winner ' + shortPair(src) : (SHORT[src.round] || '') + ' winner · ' + src.city.split(' ')[0];
       }
       return '<div class="mc-team tbd"><span class="flg" style="opacity:.3;filter:grayscale(1)">⚽</span><span class="nm">' + esc(label) + '</span></div>';
     }
-    const t = S.teams[slot.name];
+    const t = S.teams[name];
     let cls = 'mc-team', score = '';
     if (m.played) {
-      const isHome = m.home === slot.name;
-      cls += m.winner === slot.name ? ' winner' : ' loser';
+      cls += m.winner === name ? ' winner' : ' loser';
       score = '<span class="sc">' + (isHome ? m.hs : m.as) + '</span>';
-    } else if (pair.h.name && pair.a.name) {
-      const p = picks[pickKey(m, pair.h.name, pair.a.name)];
-      if (p) {
-        const adv = p.result === 'H' ? pair.h.name : p.result === 'A' ? pair.a.name : p.adv === 'H' ? pair.h.name : p.adv === 'A' ? pair.a.name : null;
-        if (adv) cls += adv === slot.name ? (' winner' + (p.result === 'D' ? ' pick-adv' : '')) : ' loser';
-      }
+    } else if (m.live) {
+      score = '<span class="sc">' + esc(m.live.score.split('–')[isHome ? 0 : 1]) + '</span>';
     }
     return '<div class="' + cls + '"><span class="flg">' + t.flag + '</span><span class="nm">' + esc(t.name) + '</span>' + score + '</div>';
   }
@@ -225,20 +244,11 @@
     const pair = slots(m);
     let cls = 'match-card' + (m.played ? ' played' : '');
     let tag = '', prob = '';
-    if (!m.played && pair.h.name && pair.a.name) {
-      const p = picks[pickKey(m, pair.h.name, pair.a.name)];
-      if (p) {
-        cls += ' predicted';
-        if (p.result === 'D') {
-          const advN = p.adv === 'H' ? pair.h.name : p.adv === 'A' ? pair.a.name : null;
-          tag = '<span class="mc-pick-tag draw-tag">Draw' + (advN ? ' · ' + esc(S.teams[advN].code) + ' ✦' : '') + '</span>';
-        } else {
-          tag = '<span class="mc-pick-tag">Pick: ' + esc(S.teams[p.result === 'H' ? pair.h.name : pair.a.name].code) + '</span>';
-        }
-      }
-      const pr = probs(m, pair.h.name, pair.a.name);
+    if (m.live) { cls += ' is-live'; tag = '<span class="mc-pick-tag live-tag">● Live · ' + esc(m.live.clock) + '</span>'; }
+    if (!m.played && !m.live && pair.h && pair.a) {
+      const pr = probs(m, pair.h, pair.a);
       if (pr) {
-        prob = '<div class="mc-prob" style="--prob-h:' + S.teams[pair.h.name].c1 + ';--prob-a:' + S.teams[pair.a.name].c1 + '">' +
+        prob = '<div class="mc-prob" style="--prob-h:' + S.teams[pair.h].c1 + ';--prob-a:' + S.teams[pair.a].c1 + '">' +
           '<i class="p-h" style="width:' + (pr.h * 100) + '%"></i><i class="p-d" style="width:' + (pr.d * 100) + '%"></i>' +
           '<i class="p-a" style="width:' + (pr.a * 100) + '%"></i></div>';
       }
@@ -246,11 +256,7 @@
     const note = m.pens ? '<div class="mc-meta" style="margin:4px 0 0"><span>' + esc(m.pens) + '</span></div>' : '';
     return '<button class="' + cls + '" data-num="' + m.num + '">' + tag +
       '<div class="mc-meta"><span>' + esc(m.date) + '</span><span>' + esc(m.city) + '</span></div>' +
-      teamRowHTML(m, pair.h, pair) + teamRowHTML(m, pair.a, pair) + prob + note + '</button>';
-  }
-  function championName() {
-    const f = S.byNum[104];
-    return f ? advancer(f).name : null;
+      teamRowHTML(m, pair.h, pair.a, true) + teamRowHTML(m, pair.a, pair.h, false) + prob + note + '</button>';
   }
   function renderBracket() {
     const cols = [
@@ -268,9 +274,9 @@
     host.innerHTML = cols.map(col => {
       let inner = '<div class="round-title">' + esc(col.title) + '</div>';
       if (col.final) {
-        const ch = championName();
-        const champ = ch
-          ? '<div class="champ-slot filled"><span class="trophy">🏆</span><span class="cl">' + (S.byNum[104].played ? 'World champions' : 'Your champion') + '</span><div class="cn">' + S.teams[ch].flag + ' ' + esc(ch) + '</div></div>'
+        const f = S.byNum[104];
+        const champ = f && f.played && f.winner
+          ? '<div class="champ-slot filled"><span class="trophy">🏆</span><span class="cl">World champions</span><div class="cn">' + S.teams[f.winner].flag + ' ' + esc(f.winner) + '</div></div>'
           : '<div class="champ-slot"><span class="trophy">🏆</span><span class="cl">Champion</span><div class="cn" style="color:var(--ink-faint)">—</div></div>';
         inner += '<div class="round-matches" style="flex:0 0 auto;gap:14px">' + cardHTML(col.ms[0]) + champ +
           (col.ms[1] ? '<div class="round-title" style="margin:6px 0 0">Bronze · Jul 18</div>' + cardHTML(col.ms[1]) : '') + '</div>';
@@ -282,26 +288,8 @@
     host.querySelectorAll('.match-card').forEach(el => {
       el.addEventListener('click', () => openPanel(+el.getAttribute('data-num')));
     });
-    renderMeter();
-  }
-
-  /* ---------- meter ---------- */
-  function renderMeter() {
-    const open = S.matches.filter(m => !m.played);
-    let done = 0;
-    open.forEach(m => {
-      const pr = slots(m);
-      if (pr.h.name && pr.a.name && picks[pickKey(m, pr.h.name, pr.a.name)]) done++;
-    });
-    document.getElementById('meter-count').textContent = done + ' / ' + open.length;
-    document.getElementById('meter-fill').style.width = (open.length ? (done / open.length) * 100 : 100) + '%';
-    const hint = document.getElementById('meter-hint');
-    if (open.length && done === open.length) {
-      hint.textContent = 'Bracket complete — may your champion lift it. 🏆';
-      celebrate();
-    } else {
-      hint.textContent = 'Pick every remaining match to crown your champion.';
-    }
+    const f = S.byNum[104];
+    if (f && f.played && f.winner) celebrate();
   }
 
   /* ---------- panel ---------- */
@@ -354,7 +342,7 @@
     const m = S.byNum[openNum];
     if (!m) return;
     const pair = slots(m);
-    const hn = pair.h.name, an = pair.a.name;
+    const hn = pair.h, an = pair.a;
     const th = hn && S.teams[hn], ta = an && S.teams[an];
     const heroBg = th && ta
       ? 'linear-gradient(118deg,' + darken(th.c1, .68) + ' 0%,' + darken(th.c1, .5) + ' 46%,' + darken(ta.c1, .5) + ' 54%,' + darken(ta.c1, .68) + ' 100%)'
@@ -362,35 +350,28 @@
     const sideHTML = t => t
       ? '<div class="ph-side"><span class="flg">' + t.flag + '</span><div class="nm">' + esc(t.name) + '</div></div>'
       : '<div class="ph-side"><span class="flg" style="opacity:.4;filter:grayscale(1)">⚽</span><div class="nm" style="opacity:.6">TBD</div></div>';
-    const heroMid = m.played ? '<div class="ph-score">' + m.hs + '–' + m.as + '</div>' : '<div class="ph-vs">VS</div>';
-    const meta = esc(m.date) + ' · ' + esc(m.time) + ' · ' + esc(m.venue) + (m.pens ? ' · ' + esc(m.pens) : '');
+    const heroMid = m.played ? '<div class="ph-score">' + m.hs + '–' + m.as + '</div>'
+      : m.live ? '<div class="ph-score">' + esc(m.live.score) + '</div>'
+      : '<div class="ph-vs">VS</div>';
+    const meta = esc(m.date) + ' · ' + esc(m.time) + ' · ' + esc(m.venue)
+      + (m.pens ? ' · ' + esc(m.pens) : '') + (m.live ? ' · LIVE ' + esc(m.live.clock) : '');
 
     let body = '';
-    if (th && ta && !m.played) {
+    if (m.live) {
+      body += '<section><div class="result-note">⚡ This one is under way — <b>' + esc(m.live.score) + '</b> (' + esc(m.live.clock) + '). Hit refresh for the latest.</div></section>';
+    } else if (th && ta && !m.played) {
       const pr = probs(m, hn, an);
       if (pr) {
         body += '<section><p class="pb-label">Win · Draw · Win — 90 minutes</p>' +
           probRowHTML(th.name, pr.h, th.c1) + probRowHTML('Draw / extra time', pr.d, 'var(--draw)') + probRowHTML(ta.name, pr.a, ta.c1) +
           '<p class="model-note">Model: World Football Elo ratings updated through the tournament' +
           (pr.hostBoost ? ', with a host-nation venue boost for ' + esc(pr.hostBoost) : '') +
-          '. The draw share is calibrated to 90-minute knockout draw rates (~28% for even ties). A predicted draw means you think it goes to extra time.</p></section>';
+          '. The draw share is calibrated to 90-minute knockout draw rates (~28% for even ties) — a draw here means extra time.</p></section>';
       }
-      const p = picks[pickKey(m, hn, an)];
-      body += '<section><p class="pb-label">Your call</p><div class="pick-grid">' +
-        pickBtnHTML('H', th.code + ' win', pr ? pr.h : null, p, false) +
-        pickBtnHTML('D', 'Draw', pr ? pr.d : null, p, true) +
-        pickBtnHTML('A', ta.code + ' win', pr ? pr.a : null, p, false) + '</div>';
-      if (p && p.result === 'D') {
-        body += '<div class="adv-picker"><div class="apl">Draw after 90 — who goes through in extra time or penalties?</div><div class="adv-btns">' +
-          '<button class="adv-btn' + (p.adv === 'H' ? ' sel' : '') + '" data-adv="H">' + th.flag + ' ' + esc(th.name) + '</button>' +
-          '<button class="adv-btn' + (p.adv === 'A' ? ' sel' : '') + '" data-adv="A">' + ta.flag + ' ' + esc(ta.name) + '</button></div></div>';
-      }
-      if (p) body += '<button class="clear-pick" id="clear-pick">Clear this prediction</button>';
-      body += '</section>';
     } else if (m.played) {
-      body += '<section><div class="result-note">Full-time: <b>' + esc(m.winner || 'Draw') + '</b>' + (m.winner ? ' advanced' : '') + (m.pens ? ' — ' + esc(m.pens) : '') + '. This one is in the books.</div></section>';
+      body += '<section><div class="result-note">Full-time: <b>' + esc(m.winner || 'Draw') + '</b>' + (m.winner ? ' advanced' : '') + (m.pens ? ' — ' + esc(m.pens) : '') + '.</div></section>';
     } else {
-      body += '<section><div class="result-note">Teams not set yet — predict the feeder matches and this fixture fills in with your picks.</div></section>';
+      body += '<section><div class="result-note">Teams are set once the feeder matches finish — check back after the earlier rounds.</div></section>';
     }
     if (th && ta) {
       body += '<section><p class="pb-label">Last five matches</p><div class="form-cols">' +
@@ -408,45 +389,12 @@
       '<div class="ph-meta">' + meta + '</div></div>' +
       '<div class="panel-body">' + body + '</div>';
     document.getElementById('panel-close').addEventListener('click', closePanel);
-    if (th && ta && !m.played) {
-      panel.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
-        const key = pickKey(m, hn, an);
-        const val = b.getAttribute('data-pick');
-        const cur = picks[key];
-        picks[key] = val === 'D' ? { result: 'D', adv: cur && cur.result === 'D' ? cur.adv : null } : { result: val };
-        prune(); savePicks(); renderBracket(); renderPanel();
-      }));
-      panel.querySelectorAll('[data-adv]').forEach(b => b.addEventListener('click', () => {
-        const key = pickKey(m, hn, an);
-        if (picks[key]) picks[key].adv = b.getAttribute('data-adv');
-        prune(); savePicks(); renderBracket(); renderPanel();
-      }));
-      const cp = document.getElementById('clear-pick');
-      if (cp) cp.addEventListener('click', () => { delete picks[pickKey(m, hn, an)]; prune(); savePicks(); renderBracket(); renderPanel(); });
-    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         panel.querySelectorAll('.prob-fill').forEach(el => { el.style.width = el.getAttribute('data-w'); });
       });
     });
     panel.scrollTop = 0;
-  }
-  function pickBtnHTML(code, label, p, cur, isDraw) {
-    const sel = cur && cur.result === code;
-    return '<button class="pick-btn' + (sel ? (isDraw ? ' sel sel-draw' : ' sel') : '') + '" data-pick="' + code + '">' +
-      '<div class="pb-top">' + esc(label) + '</div>' + (p != null ? '<div class="pb-sub">' + pct(p) + ' likely</div>' : '') + '</button>';
-  }
-  /* drop picks whose team pair no longer matches (feeder outcome changed or real result arrived) */
-  function prune() {
-    Object.keys(picks).forEach(k => {
-      const num = +k.split(':')[0];
-      const m = S.byNum[num];
-      if (!m) return;
-      if (m.played) { delete picks[k]; return; }
-      const pr = slots(m);
-      const parts = k.split(':');
-      if ((pr.h.name || '') !== parts[1] || (pr.a.name || '') !== parts[2]) delete picks[k];
-    });
   }
 
   /* ---------- tables ---------- */
@@ -476,42 +424,38 @@
     renderTables();
   }));
 
-  /* ---------- live refresh ---------- */
+  /* ---------- refresh ---------- */
+  const refreshBtn = document.getElementById('refresh-btn');
+  const badge = document.getElementById('sync-badge');
   function applyFeed(feed) {
-    feedData = feed;
     S = buildState(feed);
-    prune();
-    savePicks();
     renderBracket();
     renderTables();
     if (openNum != null) renderPanel();
   }
-  function setSyncBadge(ok) {
-    const el = document.getElementById('sync-badge');
-    if (!el) return;
-    if (ok) {
-      const d = new Date();
-      el.textContent = 'Live · scores synced ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
-      el.classList.add('ok');
-    } else {
-      el.textContent = 'Showing last saved scores';
-      el.classList.remove('ok');
-    }
-  }
   function refresh() {
-    fetch('feed.json?v=' + Date.now(), { cache: 'no-store' })
+    refreshBtn.classList.add('spinning');
+    refreshBtn.disabled = true;
+    return fetch(ESPN_URL, { cache: 'no-store' })
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(feed => {
-        if (Array.isArray(feed) && feed.length) {
-          const changed = JSON.stringify(feed) !== JSON.stringify(feedData);
-          if (changed) applyFeed(feed);
-          setSyncBadge(true);
-        }
+      .then(espn => {
+        applyFeed(mergeEspn(espn));
+        const d = new Date();
+        badge.textContent = 'Live from ESPN · updated ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+        badge.classList.add('ok');
       })
-      .catch(() => setSyncBadge(false));
+      .catch(() => {
+        badge.textContent = 'ESPN unreachable — showing last known state';
+        badge.classList.remove('ok');
+      })
+      .finally(() => {
+        refreshBtn.classList.remove('spinning');
+        refreshBtn.disabled = false;
+      });
   }
+  refreshBtn.addEventListener('click', refresh);
 
-  /* ---------- confetti ---------- */
+  /* ---------- confetti (champions crowned) ---------- */
   let celebrated = false;
   function celebrate() {
     if (celebrated) return;
@@ -552,15 +496,11 @@
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
   setTimeout(() => document.querySelectorAll('.reveal').forEach(el => el.classList.add('in')), 900);
 
-  /* ---------- boot ---------- */
-  S = buildState(SNAPSHOT);
-  prune();
-  renderBracket();
-  renderTables();
-  refresh();
-  setInterval(refresh, 3 * 60 * 1000);
+  /* ---------- boot: render snapshot instantly, then pull live ---------- */
+  applyFeed(SNAPSHOT_EMBED);
   const bs = document.querySelector('.bracket-scroller');
   if (bs) bs.scrollLeft = (bs.scrollWidth - bs.clientWidth) / 2;
   const dl = /^#m(\d+)$/.exec(location.hash);
   if (dl && S.byNum[+dl[1]]) openPanel(+dl[1]);
+  refresh();
 })();
